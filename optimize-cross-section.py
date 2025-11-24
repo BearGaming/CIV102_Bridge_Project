@@ -1,6 +1,7 @@
 import numpy as np
-from math import sin, cos, tan, pi, radians
+from math import sin, cos, tan, pi, radians, degrees
 import matplotlib.pyplot as plt
+from matplotlib.patches import Arc
 
 def find_centroid(shapes):
     x = np.array([shape.centroid[0] for shape in shapes])
@@ -13,7 +14,7 @@ def find_centroid(shapes):
 
 class Quad:
     '''
-    Pass position as a tuple
+    Pass position of the bottom left corner as a tuple
     Pass all lengths in mm
     Pass angles as degrees
 
@@ -107,7 +108,9 @@ class CrossSection:
         return fc, ft
 
 
-    def show(self, dist_to_centroid=False):
+    def show(self, dist_to_centroid=False, title="", slant=False):
+        fig = plt.figure()
+        ax = fig.add_subplot()
         for shape in self.shapes:
             x = [coord[0] for coord in shape.coords]
             y = [coord[1] for coord in shape.coords]
@@ -123,11 +126,22 @@ class CrossSection:
                 y = [self.centroid[1], d[1]]
                 plt.plot(x, y, color="g")
 
+        if slant:
+            pos = slant.coords[2]
+            angle = degrees(slant.angle)
+            a = Arc(pos, 10, 10, angle=0, theta1=-angle, theta2=0, color='black', linewidth=1)
+            angle = 180 - angle
+            plt.text(pos[0] + 10, pos[1] - 10, str(round(angle, 3)) + '°')
+            ax.add_patch(a)
+
         plt.plot(self.centroid[0], self.centroid[1], "rx", label=f"ȳ = {self.centroid[1]}")
+        plt.hlines(self.centroid[1],xmin=-60,xmax=60, color='red', linestyle='--', linewidth=1)
         plt.legend(loc='lower right')
         plt.ylim(0, 120)
-        plt.title(f"")
+        plt.title(title)
         plt.axis('equal')
+        plt.grid()
+        plt.savefig(title)
         plt.show()
 
 def build_trapezoid(angle, max_height, thickness, tab_width = 30, base=60, decks = 1):
@@ -153,22 +167,62 @@ def build_trapezoid(angle, max_height, thickness, tab_width = 30, base=60, decks
 
     perimeter = bottom.b + top_width + 2*np.linalg.norm(left_slant.slant) + 2*tab_width
     return X, top_width, perimeter
-  
 
-def test():
-    for h in range(20, 201, 20):
-        print("#"*20)
-        print(f"h = {h}mm")
-        for i in range(89,1,-1):
-            X, width, perimeter = build_trapezoid(i, h, 1.27)
-            if width < 100:
-                print("deck width too small")
-                break
+def build_design_0():
+    base = 80
+    angle = 90
+    max_height = 75+1.27
+    thickness = 1.27
+    decks = 1
+    tab_width = 6.27
+    
+    bottom = Quad((-base/2,0), base, thickness, 90)
+    # Slanted sides
+    left_slant = Quad((-base/2 - thickness, thickness), thickness, (max_height - ((2+decks)*thickness)), 90+(90-angle))
+    right_slant = Quad((base/2, thickness), thickness, (max_height - ((2+decks)*thickness)), angle)
+    print(np.linalg.norm(left_slant.slant))
 
-            load_ratio = X.centroid[1] / (X.top - X.centroid[1])
-            if load_ratio < 5:
-                print("Angle:", 90 - i, "Load Ratio:", load_ratio, "Height:", h, "Deck width:", width, "I:", X.I, "fc:", X.flexural_stress(78098))
-        X.show()
+    # Glue tabs
+    left_tab = Quad((left_slant.coords[1][0], left_slant.coords[1][1]), tab_width, thickness, 90)
+    right_tab = Quad((right_slant.coords[1][0] - (tab_width - thickness), right_slant.coords[1][1]), tab_width, thickness, 90)
+
+    U = [bottom, left_slant, right_slant, left_tab, right_tab]
+    # Top
+    top_width = 100
+    tops = [Quad((left_tab.coords[1][0]-10, left_tab.coords[1][1]), top_width, thickness, 90)]
+    U.extend(tops)
+    X = CrossSection(U)
+
+    perimeter = bottom.b + top_width + 2*np.linalg.norm(left_slant.slant) + 2*tab_width
+    return X, perimeter, left_slant
+
+def build_design_1():
+    base = 100
+    angle = 90
+    thickness = 1.27
+    max_height = 120
+    decks = 2
+    tab_width = 6.27
+    
+    bottom = Quad((-base/2,0), base, thickness, 90)
+    # Slanted sides
+    left_slant = Quad((-base/2, thickness), thickness, (max_height - ((2+decks)*thickness)), 90+(90-angle))
+    right_slant = Quad((base/2 - thickness, thickness), thickness, (max_height - ((2+decks)*thickness)), angle)
+
+    # Glue tabs
+    left_tab = Quad((left_slant.coords[1][0], left_slant.coords[1][1]), tab_width, thickness, 90)
+    right_tab = Quad((right_slant.coords[1][0] - (tab_width - thickness), right_slant.coords[1][1]), tab_width, thickness, 90)
+    top_width = 100
+    top1 = Quad((left_tab.coords[1][0], left_tab.coords[1][1]), top_width, thickness, 90)
+    top2 = Quad((top1.coords[1][0], top1.coords[1][1]), top_width, thickness, 90)
+
+
+    U = [bottom, left_slant, right_slant, left_tab, right_tab, top1, top2]
+    # Top
+    X = CrossSection(U)
+
+    perimeter = bottom.b + top_width + 2*np.linalg.norm(left_slant.slant) + 2*tab_width
+    return X, perimeter, left_slant
 
 def build_design_2():
     base = 70
@@ -198,7 +252,7 @@ def build_design_2():
     X = CrossSection(U)
 
     perimeter = bottom.b + top_width + 2*np.linalg.norm(left_slant.slant) + 2*tab_width
-    return X, perimeter
+    return X, perimeter, left_slant
 
 def build_design_3():
     base = 70
@@ -226,6 +280,7 @@ def build_design_3():
         tops.append(Quad((tops[n].coords[1][0],tops[n].coords[1][1]), top_width, thickness, 90))
     U.extend(tops)
     X = CrossSection(U)
+    return X, 0, left_slant
 
 def build_design_4():
     base = 70
@@ -257,68 +312,98 @@ def build_design_4():
 
 
     perimeter = bottom.b + top_width + 2*np.linalg.norm(left_slant.slant) + 2*tab_width
-    return X, perimeter
+    return X, perimeter, left_slant
 
-def build_design_5():
+def build_design_5a():
     base = 70
     angle = 81.13666
     max_height = 100
     thickness = 1.27
+    tab_width = 50 + thickness
     
     bottom = Quad((-base/2,0), base, thickness, 90)
     # Slanted sides
-    left_slant = Quad((-base/2 - thickness, thickness), thickness, (max_height - 2*thickness), 90+(90-angle))
-    right_slant = Quad((base/2, thickness), thickness, (max_height - 2*thickness), angle)
+    left_slant = Quad((-base/2 - thickness, thickness), thickness, (max_height - 3*thickness), 90+(90-angle))
+    right_slant = Quad((base/2, thickness), thickness, (max_height - 3*thickness), angle)
+    print(np.linalg.norm(left_slant.slant))
+    
+    left_tab = Quad((left_slant.coords[1][0], left_slant.coords[1][1]), tab_width, thickness, 90)
+    right_tab = Quad((left_tab.coords[3][0], right_slant.coords[1][1]), tab_width, thickness, 90)
 
     bottom_width = 60
     r = Quad((left_slant.coords[1][0] + 21.27 , left_slant.coords[1][1] - thickness), bottom_width, thickness, 90)
     top_width = 100 + 2*thickness
-    top1 = Quad((left_slant.coords[1][0], left_slant.coords[1][1]), top_width, thickness, 90)
-    top2 = Quad((top1.coords[1][0], top1.coords[1][1]), top_width, thickness, 90)
+    top2 = Quad((left_tab.coords[1][0], left_tab.coords[1][1]), top_width, thickness, 90)
 
-    U = [bottom, left_slant, right_slant, r, top1, top2]
+    U = [bottom, left_slant, right_slant, r, left_tab, right_tab, top2]
     X = CrossSection(U)
 
 
     perimeter = bottom.b + top_width + 2*np.linalg.norm(left_slant.slant)
-    return X, perimeter
+    return X, perimeter, left_slant
 
-def build_design_0():
-    base = 80
-    angle = 90
-    max_height = 75+1.27
+def build_design_5b():
+    base = 70
+    angle = 81.13666
+    max_height = 100
     thickness = 1.27
-    decks = 1
-    tab_width = 6.27
+    tab_width = 50 + thickness
     
     bottom = Quad((-base/2,0), base, thickness, 90)
     # Slanted sides
-    left_slant = Quad((-base/2 - thickness, thickness), thickness, (max_height - ((2+decks)*thickness)), 90+(90-angle))
-    right_slant = Quad((base/2, thickness), thickness, (max_height - ((2+decks)*thickness)), angle)
+    left_slant = Quad((-base/2 - thickness, thickness), thickness, (max_height - 3*thickness), 90+(90-angle))
+    right_slant = Quad((base/2, thickness), thickness, (max_height - 3*thickness), angle)
     print(np.linalg.norm(left_slant.slant))
-
-    # Glue tabs
+    
     left_tab = Quad((left_slant.coords[1][0], left_slant.coords[1][1]), tab_width, thickness, 90)
-    right_tab = Quad((right_slant.coords[1][0] - (tab_width - thickness), right_slant.coords[1][1]), tab_width, thickness, 90)
+    right_tab = Quad((left_tab.coords[3][0], right_slant.coords[1][1]), tab_width, thickness, 90)
 
-    U = [bottom, left_slant, right_slant, left_tab, right_tab]
-    # Top
-    top_width = 100
-    tops = [Quad((left_tab.coords[1][0]-10, left_tab.coords[1][1]), top_width, thickness, 90)]
-    U.extend(tops)
+    bottom_width = 90
+    r = Quad((left_slant.coords[1][0] + 6.27 , left_slant.coords[1][1] - thickness), bottom_width, thickness, 90)
+    top_width = 100 + 2*thickness
+    top2 = Quad((left_tab.coords[1][0], left_tab.coords[1][1]), top_width, thickness, 90)
+
+    U = [bottom, left_slant, right_slant, r, left_tab, right_tab, top2]
     X = CrossSection(U)
 
-    perimeter = bottom.b + top_width + 2*np.linalg.norm(left_slant.slant) + 2*tab_width
-    return X, perimeter
 
+    perimeter = bottom.b + top_width + 2*np.linalg.norm(left_slant.slant)
+    return X, perimeter, left_slant
 
+def optimize_trapezoid():
+    # Iterate through heights in multiples of 20
+    for h in range(20, 201, 20):
+        print("#"*20)
+        print(f"Height = {h}mm")
+        # Iterate through angles starting from shallow to steep
+        for i in range(89,1,-1):
+            X, width, perimeter = build_trapezoid(i, h, 1.27)
+            if width < 100:
+                print("deck width too small")
+                break
+
+            load_ratio = X.centroid[1] / (X.top - X.centroid[1])
+            if load_ratio < 5:
+                print("Angle:", 90 - i, "Load Ratio:", load_ratio, "Deck width:", width, "I:", X.I)
+        X.show(title="Height = " + str(h))
+
+def show_designs():
+    X, p, a = build_design_1()
+    print(X)
+    X.show(title="Design 1", slant = a)
+    
+    X, p, a = build_design_2()
+    print(X)
+    X.show(title="Design 2", slant = a)
+    X, p, a = build_design_3()
+    print(X)
+    X.show(title="Design 3", slant = a)
+    X, p, a = build_design_4()
+    print(X)
+    X.show(title="Design 4", slant = a)
+    X, p, a = build_design_5b()
+    print(X)
+    X.show(title="Design 5", slant = a)
 
 if __name__ == "__main__":
-    X, p = build_design_5()
-    print(X.Q(X.centroid[1]))
-
-    print()
-    for shape in X.shapes:
-        print(np.linalg.norm(shape.slant), shape.b)
-    X.show()
-
+    optimize_trapezoid()
