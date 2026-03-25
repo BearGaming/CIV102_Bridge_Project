@@ -2,5 +2,7 @@ This project includes a python script that was written for the purpose of rapidl
 
 ## Example Output
 Generated images of generated cross sections can be found [here](./examples)
+
 <img width="640" height="480" alt="Height = 40" src="https://github.com/user-attachments/assets/6ae26216-619c-42a6-a503-34b294dd8590" />
+
 This image shows how the cross section is represented by the program as a collection of parallelograms each with their own centroids, as well as the overal centroid with a dashed line and reported value in the legend (ybar), calculated using the first moment of area and total area.
